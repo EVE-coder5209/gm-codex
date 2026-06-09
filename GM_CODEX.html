@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GM Codex — キャラクター解析ツール</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Noto+Serif+JP:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0d0f;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: #2a2a35;
+    --accent: #c9a96e;
+    --text: #e8e4d9;
+    --muted: #7a7570;
+    --danger: #c96e6e;
+    --success: #6ec99a;
+    --pc: #7c6fcd;
+    --npc: #c9a96e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Noto Serif JP', serif; min-height: 100vh; line-height: 1.7; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+  header { border-bottom: 1px solid var(--border); padding: 20px 0; margin-bottom: 36px; }
+  .header-inner { display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-family: 'Cinzel', serif; font-size: 22px; color: var(--accent); letter-spacing: 0.08em; }
+  .logo span { font-size: 12px; color: var(--muted); display: block; font-family: 'Noto Serif JP', serif; letter-spacing: 0.2em; margin-top: 2px; }
+  .api-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: 'Noto Serif JP', serif; transition: all 0.2s; }
+  .api-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .api-btn.set { border-color: var(--success); color: var(--success); }
+
+  /* モーダル */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 32px; width: 480px; max-width: 90vw; }
+  .modal h3 { font-family: 'Cinzel', serif; color: var(--accent); font-size: 16px; margin-bottom: 12px; }
+  .modal p { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+  .modal input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 4px; font-size: 13px; font-family: monospace; margin-bottom: 16px; outline: none; }
+  .modal input:focus { border-color: var(--accent); }
+  .modal-btns { display: flex; gap: 10px; justify-content: flex-end; }
+
+  /* レイアウト */
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  /* パネル */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .panel-header { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .panel-title { font-family: 'Cinzel', serif; font-size: 13px; color: var(--accent); letter-spacing: 0.1em; }
+  .panel-body { padding: 20px; }
+
+  /* タブ */
+  .tab-bar { display: flex; gap: 4px; margin-bottom: 14px; }
+  .tab { padding: 6px 16px; font-size: 12px; font-family: 'Noto Serif JP', serif; background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 4px; cursor: pointer; transition: all 0.2s; }
+  .tab.active { border-color: var(--accent); color: var(--accent); background: rgba(201,169,110,0.08); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 14px; border-radius: 4px; font-size: 13px; font-family: 'Noto Serif JP', serif; line-height: 1.8; resize: vertical; min-height: 260px; outline: none; transition: border-color 0.2s; }
+  textarea:focus { border-color: var(--pc); }
+  textarea::placeholder { color: var(--muted); }
+
+  /* ファイル */
+  .file-drop { border: 1px dashed var(--border); border-radius: 6px; padding: 36px 20px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--bg); min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+  .file-drop:hover, .file-drop.dragover { border-color: var(--accent); background: rgba(201,169,110,0.04); }
+  .file-drop p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .file-drop input[type="file"] { display: none; }
+  .file-info { display: none; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; font-size: 12px; color: var(--text); margin-top: 10px; align-items: center; justify-content: space-between; gap: 10px; }
+  .file-info.show { display: flex; }
+  .file-clear { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; }
+  .file-clear:hover { color: var(--danger); }
+  .file-preview { font-size: 11px; color: var(--muted); margin-top: 8px; padding: 8px 12px; background: var(--bg); border-radius: 4px; border: 1px solid var(--border); max-height: 70px; overflow: hidden; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+
+  /* ボタン */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 24px; border-radius: 4px; font-size: 13px; font-family: 'Noto Serif JP', serif; cursor: pointer; transition: all 0.2s; border: none; }
+  .btn-primary { background: var(--accent); color: #0d0d0f; font-weight: 500; width: 100%; justify-content: center; margin-top: 12px; }
+  .btn-primary:hover { background: #d4b87a; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { background: none; border: 1px solid var(--border); color: var(--muted); }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+
+  .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 6px; }
+  .hint { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 12px; }
+  .error-msg { display: none; background: rgba(201,110,110,0.1); border: 1px solid var(--danger); color: var(--danger); border-radius: 4px; padding: 12px 16px; font-size: 13px; margin-top: 12px; }
+  .error-msg.show { display: block; }
+
+  /* ローディング */
+  .loading { display: none; text-align: center; padding: 60px 0; color: var(--muted); font-size: 13px; }
+  .loading.show { display: block; }
+  .spinner { display: inline-block; width: 22px; height: 22px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 空状態 */
+  .empty-state { text-align: center; padding: 60px 0; color: var(--muted); }
+  .empty-state .rune { font-family: 'Cinzel', serif; font-size: 36px; color: var(--border); margin-bottom: 14px; display: block; }
+  .empty-state p { font-size: 13px; }
+
+  /* キャラクター一覧 */
+  .char-list { display: none; }
+  .char-list.show { display: block; }
+
+  .section-label { font-size: 11px; letter-spacing: 0.2em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; font-family: 'Cinzel', serif; }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .label-pc { color: var(--pc); }
+  .label-npc { color: var(--npc); }
+
+  .char-section { margin-bottom: 28px; }
+
+  /* キャラクターカード */
+  .char-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .char-card:hover { border-color: var(--accent); }
+  .char-card.pc { border-left: 3px solid var(--pc); }
+  .char-card.npc { border-left: 3px solid var(--npc); }
+
+  .char-card-header {
+    padding: 14px 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .char-name-row { display: flex; align-items: center; gap: 10px; }
+
+  .char-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-family: 'Cinzel', serif;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+  .badge-pc { background: rgba(124,111,205,0.15); color: var(--pc); border: 1px solid rgba(124,111,205,0.3); }
+  .badge-npc { background: rgba(201,169,110,0.12); color: var(--npc); border: 1px solid rgba(201,169,110,0.25); }
+
+  .char-name { font-size: 15px; font-weight: 500; }
+  .char-summary { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .char-chevron { color: var(--muted); font-size: 12px; transition: transform 0.2s; flex-shrink: 0; }
+  .char-card.open .char-chevron { transform: rotate(180deg); }
+
+  /* 詳細 */
+  .char-detail {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding: 18px;
+  }
+  .char-card.open .char-detail { display: block; }
+
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 600px) { .detail-grid { grid-template-columns: 1fr; } }
+
+  .detail-block { }
+  .detail-block-title {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    font-family: 'Cinzel', serif;
+  }
+  .detail-block-body { font-size: 13px; line-height: 1.75; color: var(--text); }
+
+  /* ステータス */
+  .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .stat-item { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; text-align: center; }
+  .stat-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 3px; }
+  .stat-value { font-size: 18px; font-weight: 500; font-family: 'Cinzel', serif; }
+  .stat-value.pc { color: var(--pc); }
+  .stat-value.npc { color: var(--npc); }
+
+  /* キーワードタグ */
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .tag { font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid; }
+  .tag-pc { color: var(--pc); border-color: rgba(124,111,205,0.4); }
+  .tag-npc { color: var(--npc); border-color: rgba(201,169,110,0.4); }
+
+  /* メモ・関係性 */
+  .notes-block { margin-bottom: 16px; }
+  .notes-list { list-style: none; padding: 0; }
+  .notes-list li { font-size: 13px; color: var(--text); line-height: 1.75; padding: 5px 0 5px 14px; border-bottom: 1px solid var(--border); position: relative; }
+  .notes-list li:last-child { border-bottom: none; }
+  .notes-list li::before { content: '▸'; position: absolute; left: 0; color: var(--muted); font-size: 10px; top: 7px; }
+  .relation-row { font-size: 12px; color: var(--muted); padding: 5px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+  .relation-row:last-child { border-bottom: none; }
+  .relation-name { color: var(--text); font-weight: 500; min-width: 80px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="logo">
+        GM Codex
+        <span>キャラクター解析ツール for TRPG</span>
+      </div>
+      <button class="api-btn" id="apiBtn" onclick="openApiModal()">APIキー設定</button>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="layout">
+
+    <!-- 左：入力 -->
+    <div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Scenario Input</span>
+        </div>
+        <div class="panel-body">
+          <div class="tab-bar">
+            <button class="tab active" onclick="switchTab('text', event)">テキスト入力</button>
+            <button class="tab" onclick="switchTab('file', event)">ファイル読み込み</button>
+          </div>
+
+          <div class="tab-content active" id="tab-text">
+            <textarea id="scenarioText" placeholder="シナリオテキストをここに貼り付けてください。
+
+PC・NPCの情報を自動で解析します。
+
+例：
+「魔王ドラガヌスは長年の統治に疲れ果て、引退を夢見ている。HP:120、攻撃力:高いが戦わない…」" oninput="updateCount()"></textarea>
+            <div class="char-count"><span id="charCount">0</span> 文字</div>
+          </div>
+
+          <div class="tab-content" id="tab-file">
+            <div class="file-drop" id="fileDrop" onclick="document.getElementById('fileInput').click()"
+              ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+              <div style="font-size:28px;color:var(--border)">📄</div>
+              <p>クリックまたはドラッグ&ドロップ<br><span style="font-size:11px;color:var(--border)">.txt / .md / .pdf / .docx</span></p>
+              <input type="file" id="fileInput" accept=".txt,.md,.pdf,.docx" onchange="handleFileSelect(event)">
+            </div>
+            <div class="file-info" id="fileInfo">
+              <span id="fileName">—</span>
+              <button class="file-clear" onclick="clearFile()">×</button>
+            </div>
+            <div class="file-preview" id="filePreview" style="display:none;font-size:11px;color:var(--muted);margin-top:8px;padding:8px 12px;background:var(--bg);border-radius:4px;border:1px solid var(--border);max-height:70px;overflow:hidden;white-space:pre-wrap;word-break:break-all;line-height:1.5;"></div>
+          </div>
+
+          <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeScenario()">
+            <span id="btnText">キャラクターを解析する</span>
+          </button>
+
+          <div class="error-msg" id="errorMsg"></div>
+          <div class="hint">※ テキストはAnthropic APIに送信されます。APIキーはブラウザにのみ保存されます。</div>
+          <div class="hint">※ ファイルが読み込めない場合は、シナリオのテキストを直接テキストエリアに貼り付けてお試しください。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右：結果 -->
+    <div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Characters</span>
+        </div>
+        <div class="panel-body">
+
+          <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p id="loadingMsg">テキストを解析中...</p>
+          </div>
+
+          <div class="empty-state" id="emptyState">
+            <span class="rune">⚔</span>
+            <p>シナリオを解析すると<br>PC・NPCの一覧が表示されます</p>
+          </div>
+
+          <div class="char-list" id="charList">
+            <div class="char-section" id="pcSection">
+              <div class="section-label label-pc">PC — Player Characters</div>
+              <div id="pcList"></div>
+            </div>
+            <div class="char-section" id="npcSection">
+              <div class="section-label label-npc">NPC — Non-Player Characters</div>
+              <div id="npcList"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- APIキーモーダル -->
+<div class="modal-overlay" id="apiModal">
+  <div class="modal">
+    <h3>API Key Settings</h3>
+    <p>Anthropic APIキーを入力してください。キーはブラウザのlocalStorageにのみ保存され、外部に送信されることはありません。</p>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-..." />
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeApiModal()">キャンセル</button>
+      <button class="btn btn-primary" style="width:auto;margin-top:0" onclick="saveApiKey()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let fileText = '';
+let currentTab = 'text';
+
+function switchTab(tab, e) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  e.target.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+function updateCount() {
+  document.getElementById('charCount').textContent = document.getElementById('scenarioText').value.length;
+}
+
+function handleDragOver(e) { e.preventDefault(); document.getElementById('fileDrop').classList.add('dragover'); }
+function handleDragLeave() { document.getElementById('fileDrop').classList.remove('dragover'); }
+function handleDrop(e) { e.preventDefault(); document.getElementById('fileDrop').classList.remove('dragover'); const f = e.dataTransfer.files[0]; if (f) processFile(f); }
+function handleFileSelect(e) { const f = e.target.files[0]; if (f) processFile(f); }
+
+function processFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  document.getElementById('fileName').textContent = file.name + ' (' + Math.round(file.size / 1024) + 'KB)';
+  document.getElementById('fileInfo').classList.add('show');
+  if (ext === 'pdf') {
+    readPdf(file);
+  } else if (ext === 'docx') {
+    readDocx(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = e => { fileText = e.target.result; showPreview(fileText); };
+    reader.readAsText(file, 'UTF-8');
+  }
+}
+
+function readDocx(file) {
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const result = await mammoth.extractRawText({ arrayBuffer: e.target.result });
+      fileText = result.value;
+      showPreview(fileText);
+    } catch { showError('DOCXの読み込みに失敗しました。'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function readPdf(file) {
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const pdf = await pdfjsLib.getDocument(new Uint8Array(e.target.result)).promise;
+      let allText = '';
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const viewport = page.getViewport({ scale: 1 });
+        const pageWidth = viewport.width;
+
+        // x座標でカラムを分ける（左半分・右半分）
+        const leftItems = [];
+        const rightItems = [];
+
+        for (const item of content.items) {
+          if (!item.str.trim()) continue;
+          const x = item.transform[4];
+          if (x < pageWidth * 0.5) {
+            leftItems.push(item);
+          } else {
+            rightItems.push(item);
+          }
+        }
+
+        // y座標でソートして行を組み立てる
+        const buildColumn = (items) => {
+          if (!items.length) return '';
+          items.sort((a, b) => b.transform[5] - a.transform[5]); // y降順
+          let text = '';
+          let lastY = null;
+          for (const item of items) {
+            const y = item.transform[5];
+            if (lastY !== null && Math.abs(y - lastY) > 5) {
+              text += '\n';
+            }
+            text += item.str;
+            lastY = y;
+          }
+          return text;
+        };
+
+        const leftText = buildColumn(leftItems);
+        const rightText = buildColumn(rightItems);
+        allText += leftText + '\n' + rightText + '\n';
+      }
+
+      fileText = allText;
+      showPreview(allText);
+    } catch (err) {
+      showError('PDFの読み込みに失敗しました。');
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+
+function showPreview(text) {
+  const p = document.getElementById('filePreview');
+  p.style.display = 'block';
+  p.textContent = text.slice(0, 200) + (text.length > 200 ? '…' : '');
+}
+
+function clearFile() {
+  fileText = '';
+  document.getElementById('fileInfo').classList.remove('show');
+  document.getElementById('filePreview').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+}
+
+function openApiModal() { document.getElementById('apiKeyInput').value = localStorage.getItem('gm_codex_api_key') || ''; document.getElementById('apiModal').classList.add('open'); }
+function closeApiModal() { document.getElementById('apiModal').classList.remove('open'); }
+function saveApiKey() {
+  const raw = document.getElementById('apiKeyInput').value.trim();
+  // ASCII印字文字のみ保存（全角・不可視文字を除去）
+  const key = raw.replace(/[^\x20-\x7E]/g, '').trim();
+  if (key) {
+    localStorage.setItem('gm_codex_api_key', key);
+    document.getElementById('apiBtn').classList.add('set');
+    document.getElementById('apiBtn').textContent = 'APIキー設定済';
+  } else if (raw) {
+    // 入力はあったが全て除去された場合
+    showError('APIキーに使用できない文字が含まれています。英数字・記号のみ入力してください。');
+    return;
+  }
+  closeApiModal();
+}
+
+function showError(msg) { const el = document.getElementById('errorMsg'); el.textContent = msg; el.classList.add('show'); }
+function hideError() { document.getElementById('errorMsg').classList.remove('show'); }
+
+function toggleCard(id) {
+  const card = document.getElementById(id);
+  card.classList.toggle('open');
+}
+
+function renderChar(c, type, index) {
+  const id = type + '-' + index;
+  const badgeClass = type === 'pc' ? 'badge-pc' : 'badge-npc';
+  const badgeLabel = type === 'pc' ? 'PC' : 'NPC';
+  const statClass = type;
+
+  const statsHtml = c.stats && Object.keys(c.stats).length > 0
+    ? `<div class="status-grid">
+        ${Object.entries(c.stats).map(([k, v]) => `
+          <div class="stat-item">
+            <div class="stat-label">${k}</div>
+            <div class="stat-value ${statClass}">${v}</div>
+          </div>`).join('')}
+      </div>` : '';
+
+  const notesHtml = c.notes && c.notes.length > 0
+    ? `<div class="notes-block">
+        <div class="detail-block-title">キャラクター情報</div>
+        <ul class="notes-list">
+          ${c.notes.map(n => `<li>${n}</li>`).join('')}
+        </ul>
+      </div>` : '';
+
+  const relationsHtml = c.relations && c.relations.filter(r => r.name).length > 0
+    ? `<div class="notes-block">
+        <div class="detail-block-title">関係性</div>
+        <div>${c.relations.filter(r => r.name).map(r => `<div class="relation-row"><span class="relation-name">${r.name}</span><span>${r.desc}</span></div>`).join('')}</div>
+      </div>` : '';
+
+  const tagsHtml = c.keywords && c.keywords.length > 0
+    ? `<div class="tags">${c.keywords.map(k => `<span class="tag tag-${type}">${k}</span>`).join('')}</div>` : '';
+
+  return `
+    <div class="char-card ${type}" id="${id}">
+      <div class="char-card-header" onclick="toggleCard('${id}')">
+        <div>
+          <div class="char-name-row">
+            <span class="char-badge ${badgeClass}">${badgeLabel}</span>
+            <span class="char-name">${c.name}</span>
+          </div>
+          <div class="char-summary">${c.summary}</div>
+        </div>
+        <span class="char-chevron">▼</span>
+      </div>
+      <div class="char-detail">
+        ${statsHtml}
+        ${notesHtml}
+        ${relationsHtml}
+        ${tagsHtml}
+      </div>
+    </div>`;
+}
+
+async function analyzeScenario() {
+  const rawKey = localStorage.getItem('gm_codex_api_key') || '';
+  // ヘッダーに使用できるASCII印字文字のみに限定（全角・不可視文字を除去）
+  const apiKey = rawKey.replace(/[^ -~]/g, '').trim();
+  hideError();
+
+  let text = currentTab === 'text'
+    ? document.getElementById('scenarioText').value.trim()
+    : fileText.trim();
+
+  if (!text) { showError('シナリオテキストを入力またはファイルを読み込んでください。'); return; }
+  if (!apiKey) { showError('APIキーが設定されていません。右上から登録してください。'); return; }
+
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true;
+  document.getElementById('btnText').textContent = '解析中...';
+  document.getElementById('loading').classList.add('show');
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('charList').classList.remove('show');
+
+  // ── キャラクター関連テキストの抽出 ──────────────────
+  document.getElementById('loadingMsg').textContent = 'キャラクター情報を抽出中...';
+  const filteredText = filterCharacterText(text);
+  document.getElementById('loadingMsg').textContent = `AIで解析中... (${text.length}文字 → ${filteredText.length}文字に絞り込み)`;
+
+  const prompt = `TRPGシナリオのキャラクターを抽出してJSONのみ返してください。前置き・後書き不要。
+
+ルール:
+- pcs: 「探索者」「PC」などプレイヤー操作キャラ。明示なければ[]
+- npcs: GM操作キャラ全員（神話生物・モンスター・故人・死体も含む）
+- stats: シナリオ明記の数値のみ。なければ{}
+- notes: GMが知るべき重要情報を箇条書き3〜5個。シナリオ記載のみ、推測不可
+- keywords: 特徴的なワード3個以内
+- relations: 他キャラとの関係。なければ[]
+
+シナリオ（キャラクター関連部分を抽出済み）:
+${filteredText}
+
+JSON形式:
+{"pcs":[{"name":"","summary":"","notes":[],"stats":{},"relations":[],"keywords":[]}],"npcs":[{"name":"","summary":"","notes":[],"stats":{},"relations":[],"keywords":[]}]}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 6000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || 'APIエラー: ' + res.status); }
+
+    const data = await res.json();
+    const raw = data.content[0].text;
+    let parsed;
+    try {
+      const m = raw.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(m ? m[0] : raw);
+    } catch {
+      // JSONが途中で切れた場合の修復処理
+      try {
+        let fixed = raw.replace(/^```[\w]*\n?/, '').replace(/```$/, '').trim();
+        // 最後の完全なオブジェクトで切り詰めて補完
+        const lastClose = fixed.lastIndexOf('},');
+        if (lastClose > 0) {
+          fixed = fixed.substring(0, lastClose + 1);
+          if (!fixed.match(/"npcs"\s*:/)) {
+            fixed = fixed + '],"npcs":[]}';
+          } else {
+            fixed = fixed + ']}';
+          }
+        }
+        const m2 = fixed.match(/\{[\s\S]*\}/);
+        parsed = JSON.parse(m2 ? m2[0] : fixed);
+      } catch {
+        try {
+          const pcsMatch = raw.match(/"pcs"\s*:\s*(\[[\s\S]*?\])\s*,?\s*"npcs"/);
+          const npcsMatch = raw.match(/"npcs"\s*:\s*(\[[\s\S]*?\])\s*[},]/);
+          if (pcsMatch || npcsMatch) {
+            parsed = {
+              pcs: pcsMatch ? JSON.parse(pcsMatch[1]) : [],
+              npcs: npcsMatch ? JSON.parse(npcsMatch[1]) : []
+            };
+          } else {
+            throw new Error('解析失敗');
+          }
+        } catch {
+          throw new Error('AIの返答を解析できませんでした。テキストを短くして再度お試しください。');
+        }
+      }
+    }
+
+    renderAll(parsed);
+
+  } catch (err) {
+    showError(err.message || '解析中にエラーが発生しました。');
+    document.getElementById('emptyState').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    document.getElementById('btnText').textContent = 'キャラクターを解析する';
+    document.getElementById('loading').classList.remove('show');
+  }
+}
+
+// ── キャラクター関連テキスト抽出フィルター v8 ──────────────
+function filterCharacterText(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  const isFurigana = (line) =>
+    /^[\u3040-\u309f\s]{1,10}$/.test(line) ||
+    (line.length <= 3 && /^[\u3040-\u309f\u4e00-\u9fff]/.test(line)) ||
+    /^[\u3040-\u309f]{1,4}(\s[\u3040-\u309f]{1,4}){1,3}$/.test(line);
+
+  const isNoiseLine = (line) =>
+    isFurigana(line) ||
+    /^→/.test(line) ||
+    /^〔注/.test(line) ||
+    /^\(KP/.test(line) ||
+    /^\[注/.test(line) ||
+    /^\(※/.test(line) ||
+    /^※/.test(line) ||
+    /探索可能箇所[：:]/.test(line) ||
+    /^(ロールに|判定に)(成功|失敗)/.test(line) ||
+    /^★/.test(line) ||
+    /^\*+\s*(シナリオ|探索|解決|エンド|キーパー)/.test(line) ||
+    /^(手がかり|ヒント|サブクエスト)[・・\/]?(SAN|情報|判定)/.test(line) ||
+    /^https?:\/\//.test(line) ||
+    /©|Copyright|\(C\)|二次創作|権利を有する/.test(line) ||
+    /^(推奨人数|所要時間|セッション時間|難易度|プレイ人数|想定時間|推奨技能|シナリオ傾向|舞台|ロスト率|後遺症|テーマ|プレイ時間)/.test(line);
+
+  const isSkipSection = (line) =>
+    /^(■|□|◆|●)\s*(浜辺|森|島|集落|洞窟|トンネル|廊下|部屋|家|城|街|村|町|研究室|病室|商店街|出口|監視室|制御室|桟橋|岸|海|山|丘|神殿|書庫|回廊|前室|祭壇|遺構)/.test(line) ||
+    /^[A-Za-zA-Ｚ][:：]/.test(line) ||
+    /^(Beach|Forest|Island|Cave|Village|Corridor|Chant|Beggar|Reward|Remarks)\b/i.test(line) ||
+    /^(エンド|END)[ABC\d①-⑨]/i.test(line) ||
+    /エンディング[①②③]|エンド①|エンド②|エンド③/.test(line) ||
+    /^(クリア報酬|備考|あとがき|キーパーのコツ|シナリオ解説|ご注意|雑記|生還報酬)/.test(line) ||
+    /^\[イベ/.test(line) ||
+    /^\[場所\]/.test(line) ||
+    /^\[エンド/.test(line) ||
+    /^[〜～]\s*(B\dF|地下\d|地上\d)/.test(line) ||
+    /^[《]\s*(浜辺|森|島|集落|洞窟|廊下|部屋|家|城|街|村|町|研究室|病室|商店街|出口|監視室|制御室|物乞い|詠唱|客神|桟橋|導入)/.test(line) ||
+    /^(はじめに|世界観|Introduction|シナリオ本編|本編|探索者作成|概要|セッション概要)/.test(line) ||
+    /^(舞台|シーン|場所|ロケーション)[・・\/／\s]*(詳細|一覧|設定|解説)/.test(line) ||
+    /SAN(値|喪失)?(・|の)?技能.*(早見|一覧|表)|SAN早見|技能ロール早見/.test(line) ||
+    /^第[一二三四五六七八九十]幕/.test(line) ||
+    /^SAN(喪失)?累積/.test(line) ||
+    /^板[①-⑥「]|六枚の粘土板|粘土板一覧/.test(line) ||
+    /後日談|エンディング三種|共通後日談|最後にキーパーへ/.test(line) ||
+    /神格設定|能力設計|ゲームデータ|BRP|クトゥルフ神話との接続|外見.*恐怖設計/.test(line);
+
+  const isCharSectionHeader = (line) =>
+    /登場人物|キャラクター(一覧)?|NPC一覧/.test(line) ||
+    /登場\s*NPC|登場キャラ|-神話生物-|-NPC-/.test(line) ||
+    /Character\b/i.test(line) ||
+    /クリーチャー|神話生物(一覧)?|モンスター(一覧)?/.test(line);
+
+  const isCharIntroLine = (line) =>
+    /^[・•▶▷►]\s*[^\s・〈〔→★\d「]/.test(line) ||  // ▶形式のNPC見出しに対応
+    /^[□■◆▶]\s*[^\s■□◆〈「▶]/.test(line) ||
+    /^[^\s・〈〔→★\[\]#\d＊*「]{1,20}[（(][^）)]{1,15}[）)]$/.test(line) ||
+    /^[\u4e00-\u9fff\u30a0-\u30ff]{2,10}(\s[\u4e00-\u9fff\u30a0-\u30ff]{1,6})?$/.test(line);
+
+  const isStatLine = (line) =>
+    /STR\d+|CON\d+|POW\d+|DEX\d+|SIZ\d+|INT\d+/.test(line) ||
+    /(?:str|con|dex|pow|app|int|siz|edu)[：:]\s*\d+/i.test(line) ||  // Str：24 形式に対応
+    /APP\d+|EDU\d+/.test(line) ||
+    /耐久力\s*\d+|HP\s*\d+|MP\s*\d+|SAN\s*\d+/.test(line) ||
+    /DB[：:＋+－\-]|BLD[：:]|MOV[：:]\s*\d+/.test(line) ||
+    /近接戦闘|格闘\s*\d+%|射撃\s*\d+%|回避\s*\d+%/.test(line);
+
+  const isCharAttr = (line) =>
+    /故人|享年/.test(line) ||
+    /年齢\s*[:：]|[\d０-９]+歳|[\d０-９]+才[。、]/.test(line) ||
+    /身長|体重|血液型|誕生日/.test(line) ||
+    /性格|口癖|弱点|秘密|動機|目的|特徴|外見|背景|経緯|職業/.test(line) ||
+    /神話生物|邪神|化身|眷属|神格|クトゥルフ|ハスター|ニャルラトホテプ|ミ＝ゴ|ビヤーキー|ショゴス|チャウグナル|ミリ・ニグリ/.test(line) ||
+    /の(恋人|仲間|部下|上司|友人|敵|親友)/.test(line) ||
+    /肌|髪|体格|体型|服装|白衣/.test(line) ||
+    /不治の病|余命|アレルギー|病気|発症|に侵され|を患/.test(line) ||
+    /アンドロイド|ロボット|AI|人工知能/.test(line) ||
+    /は.{1,40}(である|だった|していた|となっている)/.test(line) ||
+    /意識は|正体は|実態は|目的は|役割は/.test(line);
+
+  const isCharAttrStrict = (line) =>
+    /故人|享年/.test(line) ||
+    /神話生物|邪神|化身|眷属|ミ＝ゴ|ビヤーキー|ショゴス|チャウグナル|ミリ・ニグリ|ハスター|ニャルラトホテプ|クトゥルフ/.test(line) ||
+    /不治の病|余命.{0,10}[年月]|を宣告/.test(line);
+
+  const result = [];
+  let mode = 'skip';
+  let inCharBlock = false;
+  let charBlockBuffer = [];
+
+  const flushCharBlock = () => {
+    if (charBlockBuffer.length > 0) {
+      result.push(charBlockBuffer.join('\n'));
+      charBlockBuffer = [];
+    }
+    inCharBlock = false;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (isNoiseLine(line)) continue;
+
+    if (isSkipSection(line)) {
+      flushCharBlock(); mode = 'skip'; continue;
+    }
+    if (isCharSectionHeader(line)) {
+      flushCharBlock(); mode = 'char_section'; result.push(line); continue;
+    }
+
+    if (isStatLine(line)) {
+      if (inCharBlock) charBlockBuffer.push(line);
+      else result.push(line);
+      continue;
+    }
+
+    if (mode === 'char_section') {
+      if (isCharIntroLine(line)) {
+        flushCharBlock(); inCharBlock = true; charBlockBuffer.push(line); continue;
+      }
+      if (inCharBlock) {
+        if (isSkipSection(line)) { flushCharBlock(); mode = 'skip'; continue; }
+        if (isCharSectionHeader(line)) { flushCharBlock(); result.push(line); continue; }
+        charBlockBuffer.push(line);
+        continue;
+      }
+      if (isCharAttr(line)) result.push(line);
+      continue;
+    }
+
+    if (mode === 'skip') {
+      if (isCharAttrStrict(line) || isStatLine(line)) result.push(line);
+      continue;
+    }
+  }
+
+  flushCharBlock();
+
+  const filtered = result.join('\n\n');
+  const ratio = Math.round(filtered.length / text.length * 100);
+  console.log('[GM Codex] 元: ' + text.length + '文字 → 抽出後: ' + filtered.length + '文字 (' + ratio + '%)');
+  return filtered || text;
+}
+
+function renderAll(data) {
+  const pcs = data.pcs || [];
+  const npcs = data.npcs || [];
+
+  // PCセクション：存在する場合のみ表示
+  const pcSection = document.getElementById('pcSection');
+  if (pcs.length > 0) {
+    document.getElementById('pcList').innerHTML = pcs.map((c, i) => renderChar(c, 'pc', i)).join('');
+    pcSection.style.display = 'block';
+  } else {
+    pcSection.style.display = 'none';
+  }
+
+  // NPCセクション
+  document.getElementById('npcList').innerHTML = npcs.length
+    ? npcs.map((c, i) => renderChar(c, 'npc', i)).join('')
+    : '<p style="color:var(--muted);font-size:13px;padding:8px 0">NPCは見つかりませんでした</p>';
+
+  document.getElementById('charList').classList.add('show');
+}
+
+// 初期化
+(function() {
+  const key = localStorage.getItem('gm_codex_api_key');
+  if (key) { document.getElementById('apiBtn').classList.add('set'); document.getElementById('apiBtn').textContent = 'APIキー設定済'; }
+})();
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script>if (typeof pdfjsLib !== 'undefined') pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+
+</body>
+</html>
